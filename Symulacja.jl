@@ -1,7 +1,9 @@
+using Plots: append!
 using Plots
 
 function area_epidemic_simulation(size, N0, meetings, incubation_time, immunity_time, lockdowns,
-    vaccination_day, vaccinations, vaccine_immunity_time, death_prop, recovery_prop, infection_propability, symptoms_prop, T)
+    vaccination_day, vaccinations, vaccine_immunity_time, death_prop, recovery_prop, infection_propability, symptoms_prop, T,
+    display_heatmap=true, display_plot=true)
     # 0 - dead
     # 1 - susceptible
     # 2 - exposed
@@ -16,17 +18,22 @@ function area_epidemic_simulation(size, N0, meetings, incubation_time, immunity_
     recovered = []
     vaccinated = []
     unvaccinated = collect(1:size^2)
-    infected_record = [N0]
+
+    total_infected_record = [N0]
+    infected_record = [0]
+    dead_record = [0]
+
     population = ones(size, size)
     infection_days = fill(T, size, size)
     recovery_days = fill(T, size, size)
     vaccination_days = fill(T, size, size)
+    vaccinations = floor(vaccinations * size^2)
 
     # Random first infected
     for person in 1:N0
         index = rand(susceptible)
         population[index] = 3
-        append!(infected, index)
+        append!(infected_asymptomatic, index)
         filter!(i -> i != index, susceptible)
     end
 
@@ -68,7 +75,13 @@ function area_epidemic_simulation(size, N0, meetings, incubation_time, immunity_
                 # If person is exposed and incubation time has ended, change his status to infected
                 if population[index] == 2 && t - infection_days[index] >= incubation_time
                     population[index] = 3
-                    if rand()<symptoms_prop
+                    if index ∈ vaccinated
+                        if rand()<symptoms_prop/5
+                            append!(infected, index)
+                        else
+                            append!(infected_asymptomatic, index)
+                        end
+                    elseif rand()<symptoms_prop
                         append!(infected, index)
                     else
                         append!(infected_asymptomatic, index)
@@ -85,18 +98,36 @@ function area_epidemic_simulation(size, N0, meetings, incubation_time, immunity_
                 # If the person is infected
                 if population[row, person] == 3
                     
-                    # For each met person from the neighbourhood
-                    for met_person in 1:met_today
-                        if rand()<infection_prop
+                    if index ∈ infected_asymptomatic
+
+                        # For each met person from the neighbourhood
+                        for met_person in 1:met_today
+                            inf_prop = infection_propability
                             m = rand(-1:1)
                             n = rand(-1:1)
                             new_infected_index = size * (person + n - 1) + row + m
+
+                            if new_infected_index ∈ vaccinated
+                                inf_prop = inf_prop/4
+                            end
+
                             try
-                                if population[new_infected_index] == 1 && new_infected_index ∉ vaccinated
+                                if population[new_infected_index] == 1 && rand()<inf_prop
                                     population[new_infected_index] = 2
                                     append!(exposed, new_infected_index)
                                     filter!(i -> i != new_infected_index, susceptible)
                                     infection_days[new_infected_index] = t
+
+                                elseif population[new_infected_index] == 4
+                                    time_from_recovery = t - recovery_days[new_infected_index]
+                                    full_immunity_time = floor(0.3 * vaccine_immunity_time)
+                                    inf_prop = inf_prop * (time_from_recovery - full_immunity_time) / (immunity_time - full_immunity_time)
+                                    if time_from_recovery >= full_immunity_time && rand()<inf_prop
+                                        population[new_infected_index] = 2
+                                        append!(exposed, new_infected_index)
+                                        filter!(i -> i != new_infected_index, recovered)
+                                        infection_days[new_infected_index] = t
+                                    end
                                 end
                             catch BoundsError
                                 continue
@@ -109,7 +140,7 @@ function area_epidemic_simulation(size, N0, meetings, incubation_time, immunity_
                         append!(recovered, index)
                         filter!(i -> i != index, infected)
                         filter!(i -> i != index, infected_asymptomatic)
-                        recovery_days[row, person] = t
+                        recovery_days[index] = t
 
                     elseif index ∈ infected && rand()<death_prop
                         population[index] = 0
@@ -125,20 +156,35 @@ function area_epidemic_simulation(size, N0, meetings, incubation_time, immunity_
                 end
             end
         end
-        infected_number = length(infected) + length(infected_asymptomatic)
-        append!(infected_record, infected_number)
+        total_infected_number = length(infected) + length(infected_asymptomatic)
         deaths = length(dead)
+        append!(total_infected_record, total_infected_number)
+        append!(infected_record, length(infected))
+        append!(dead_record, deaths)
         
-        heatmap(population,
-            title="Day: $t    Deaths: $deaths",
-            color=[:black, :gray, :yellow, :orange, :green],
-            clim=(0, 4),
-            size=(650, 650),
-            aspectratio=1
-        )
+        if display_heatmap
+            heatmap(population,
+                title="Day: $t    Deaths: $deaths",
+                color=[:black, :gray, :yellow, :orange, :green],
+                clim=(0, 4),
+                size=(650, 650),
+                aspectratio=1
+            )
+        end
     end
-    plot(0:T, infected_record) |> display
-    gif(anim, "epidemic.gif", fps=15) |> display
+    deaths = length(dead)
+
+    if display_plot
+        plot(0:T, total_infected_record, title="Deaths: $deaths", legend=false)
+        plot!(0:T, dead_record)
+        plot!(0:T, infected_record) |> display
+    end
+
+    if display_heatmap
+        gif(anim, "epidemic.gif", fps=15) |> display
+    end
+
+    return [deaths, infected_record]
 end
 
 
@@ -147,15 +193,15 @@ N0 = 10
 meetings = 3
 incubation_time = 3
 immunity_time = 100
-lockdowns = []
-vaccination_day = 200
-vaccinations = 30
+lockdowns = [[100, 200]]
+vaccination_day = 150
+vaccinations = 0.002
 vaccine_immunity_time = 180
 death_prop = 0.001
 recovery_prop = 0.05
-infection_propability = 0.2
+infection_propability = 0.6
 symptoms_prop = 0.5
-T = 800
+T = 400
 
 area_epidemic_simulation(size, N0, meetings, incubation_time, immunity_time, lockdowns,
         vaccination_day, vaccinations, vaccine_immunity_time, death_prop, recovery_prop, infection_propability, symptoms_prop, T)
