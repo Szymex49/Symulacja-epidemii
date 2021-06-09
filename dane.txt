@@ -1,2 +1,12 @@
-procent szczepionych - 0.002
-czas odporności po wyzdrowieniu - 
+meetings = 3
+incubation_time = 5
+immunity_time = 240
+vaccination_day = 300
+vaccinations = 0.004
+vaccine_immunity_time = 180
+death_prop = 0.025
+recovery_prop = 0.04
+infection_propability = 0.8
+symptoms_prop = 0.5
+move_prop = 0.002
+T = 500
