@@ -1,5 +1,9 @@
 using Plots
 
+
+"Simulate the epidemic using given parameteres.
+Display the plot of infected number and the animation of epidemic progress.
+Return a vector containing total deaths and maximum infected with symptoms number."
 function area_epidemic_simulation(size, N0, meetings, incubation_time, immunity_time, lockdowns,
     vaccination_day, vaccinations, vaccine_immunity_time,
     death_prop, recovery_prop, infection_propability, symptoms_prop, move_propability, T,
@@ -10,6 +14,7 @@ function area_epidemic_simulation(size, N0, meetings, incubation_time, immunity_
     # 3 - infected
     # 4 - recovered
 
+    # Conteners for each state
     dead = []
     susceptible = collect(1:size^2)
     exposed = []
@@ -19,15 +24,17 @@ function area_epidemic_simulation(size, N0, meetings, incubation_time, immunity_
     vaccinated = []
     unvaccinated = collect(1:size^2)
 
+    # Records
     total_infected_record = [N0]
     infected_record = [0]
     dead_record = [0]
 
-    population = ones(size, size)
-    infection_days = fill(T, size, size)
-    recovery_days = fill(T, size, size)
-    vaccination_days = fill(T, size, size)
-    vaccinations = floor(vaccinations * size^2)
+    population = ones(size, size)   # Array with each person's state
+    infection_days = fill(T, size, size)   # Array with days of infection
+    recovery_days = fill(T, size, size)   # Array with days of recovery
+    vaccination_days = fill(T, size, size)   # Array with days of vaccination
+
+    vaccinations = floor(vaccinations * size^2)  # Number of vaccinations in one day
 
     # Random first infected
     for person in 1:N0
@@ -43,14 +50,14 @@ function area_epidemic_simulation(size, N0, meetings, incubation_time, immunity_
         met_today = meetings
         move_prop = move_propability
         
-        # If it's lockdown
+        # If it's lockdown, reduce infection propability, meetings and moving propability
         for lockdown in lockdowns
             if lockdown[1] <= t <= lockdown[2]
-                if lockdown[3] == 1
+                if lockdown[3] == 1      # Light lockdown
                     infection_prop = 0.7 * infection_prop
                     met_today = 2
                     move_prop = 0.7 * move_prop
-                elseif lockdown[3] == 2
+                elseif lockdown[3] == 2  # Heavy lockdown
                     infection_prop = 0.5 * infection_prop
                     met_today = 1
                     move_prop = 0.5 * move_prop
@@ -79,43 +86,17 @@ function area_epidemic_simulation(size, N0, meetings, incubation_time, immunity_
             for person in 1:size
 
                 index = size*(person-1) + row
-                
-                # If person is healthy and travels
-                if index ∉ vcat(infected_asymptomatic, infected, dead) && rand()<move_prop
-                    inf_prop = infection_propability
-                    random_person = rand(1:size^2)   # Random met person
-                    if random_person ∈ infected_asymptomatic
-                        
-                        # If travelling person is vaccinated
-                        if index ∈ vaccinated
-                            inf_prop = inf_prop/6
-                        end
 
-                        if population[index] == 1 && rand()<inf_prop
-                            population[index] = 2
-                            append!(exposed, index)
-                            filter!(i -> i != index, susceptible)
-                            infection_days[index] = t
-
-                        elseif population[index] == 4
-                            time_from_recovery = t - recovery_days[index]
-                            full_immunity_time = floor(0.3 * immunity_time)
-                            inf_prop = inf_prop * (time_from_recovery - full_immunity_time) / (immunity_time - full_immunity_time)
-                            if time_from_recovery >= full_immunity_time && rand()<inf_prop
-                                population[index] = 2
-                                append!(exposed, index)
-                                filter!(i -> i != index, recovered)
-                                infection_days[index] = t
-                            end
-                        end
-                    end
+                # If vaccine immunity time has ended
+                if t - vaccination_days[index] >= vaccine_immunity_time
+                    append!(unvaccinated, index)
+                    filter!(i -> i != index, vaccinated)
                 end
-
                 
-                # If person is exposed and incubation time has ended, change his status to infected
+                # If person is exposed and incubation time has ended, change her status to infected
                 if population[index] == 2 && t - infection_days[index] >= incubation_time
                     population[index] = 3
-                    if index ∈ vaccinated
+                    if index ∈ vaccinated   # If person is vaccinated, reduce symptoms propability
                         if rand()<symptoms_prop/5
                             append!(infected, index)
                         else
@@ -129,32 +110,63 @@ function area_epidemic_simulation(size, N0, meetings, incubation_time, immunity_
                     filter!(i -> i != index, exposed)
                 end
 
-                # If vaccine immunity time has ended
-                if t - vaccination_days[index] >= vaccine_immunity_time
-                    append!(unvaccinated, index)
-                    filter!(i -> i != index, vaccinated)
+                # If person is healthy and travels
+                if index ∉ vcat(infected_asymptomatic, infected, dead) && rand()<move_prop
+                    inf_prop = infection_prop
+                    random_person = rand(1:size^2)   # Random met person
+                    if random_person ∈ infected_asymptomatic   # If met person is infected asymptopmatic
+                        
+                        # If travelling person is vaccinated, reduce infection propability
+                        if index ∈ vaccinated
+                            inf_prop = inf_prop/6
+                        end
+
+                        # If travelling person is susceptible
+                        if population[index] == 1 && rand()<inf_prop
+                            population[index] = 2
+                            append!(exposed, index)
+                            filter!(i -> i != index, susceptible)
+                            infection_days[index] = t
+                        
+                        # If travelling person is recovered
+                        elseif population[index] == 4
+                            time_from_recovery = t - recovery_days[index]
+                            full_immunity_time = floor(0.3 * immunity_time)
+                            inf_prop = inf_prop * (time_from_recovery - full_immunity_time) / (immunity_time - full_immunity_time)
+                            if time_from_recovery >= full_immunity_time && rand()<inf_prop
+                                population[index] = 2
+                                append!(exposed, index)
+                                filter!(i -> i != index, recovered)
+                                infection_days[index] = t
+                            end
+                        end
+                    end
                 end
                 
                 # If the person is infected
                 if population[row, person] == 3
                     
+                    # If person is infected asymptomatic, he can travel or stay home
                     if index ∈ infected_asymptomatic
                         
                         # If infected person travels
                         if rand()<move_prop
-                            inf_prop = infection_propability
-                            random_person = rand(1:size^2)
+                            inf_prop = infection_prop
+                            random_person = rand(1:size^2)   # Random met person
 
+                            # If met person is vaccinated reduce infection propability
                             if random_person ∈ vaccinated
                                 inf_prop = inf_prop/6
                             end
 
+                            # If met person is susceptible
                             if population[random_person] == 1 && rand()<inf_prop
                                 population[random_person] = 2
                                 append!(exposed, random_person)
                                 filter!(i -> i != random_person, susceptible)
                                 infection_days[random_person] = t
 
+                            # If met person is recovered
                             elseif population[random_person] == 4
                                 time_from_recovery = t - recovery_days[random_person]
                                 full_immunity_time = floor(0.3 * immunity_time)
@@ -171,48 +183,54 @@ function area_epidemic_simulation(size, N0, meetings, incubation_time, immunity_
                         else
                             # For each met person from the neighbourhood
                             for met_person in 1:met_today
-                                inf_prop = infection_propability
+                                inf_prop = infection_prop
                                 m = rand(-1:1)
                                 n = rand(-1:1)
 
+                                # If we go out of range
                                 if row + m > size || row + m < 1 || person + n > size || person + n < 1
                                     continue
                                 end
 
-                                new_infected_index = size * (person + n - 1) + row + m
+                                neighbour = size * (person + n - 1) + row + m
 
-                                if new_infected_index ∈ vaccinated
+                                # If met neighbour is vaccinated, reduce infection propability
+                                if neighbour ∈ vaccinated
                                     inf_prop = inf_prop/6
                                 end
 
+                                # If neighbour is susceptible
                                 if population[row + m, person + n] == 1 && rand()<inf_prop
-                                    population[new_infected_index] = 2
-                                    append!(exposed, new_infected_index)
-                                    filter!(i -> i != new_infected_index, susceptible)
-                                    infection_days[new_infected_index] = t
+                                    population[neighbour] = 2
+                                    append!(exposed, neighbour)
+                                    filter!(i -> i != neighbour, susceptible)
+                                    infection_days[neighbour] = t
 
-                                elseif population[new_infected_index] == 4
-                                    time_from_recovery = t - recovery_days[new_infected_index]
+                                # If neighbour is recovered
+                                elseif population[neighbour] == 4
+                                    time_from_recovery = t - recovery_days[neighbour]
                                     full_immunity_time = floor(0.3 * immunity_time)
                                     inf_prop = inf_prop * (time_from_recovery - full_immunity_time) / (immunity_time - full_immunity_time)
                                     if time_from_recovery >= full_immunity_time && rand()<inf_prop
-                                        population[new_infected_index] = 2
-                                        append!(exposed, new_infected_index)
-                                        filter!(i -> i != new_infected_index, recovered)
-                                        infection_days[new_infected_index] = t
+                                        population[neighbour] = 2
+                                        append!(exposed, neighbour)
+                                        filter!(i -> i != neighbour, recovered)
+                                        infection_days[neighbour] = t
                                     end
                                 end
                             end
                         end
                     end
                     
+                    # Infected person can recover
                     if rand()<recovery_prop
                         population[index] = 4
                         append!(recovered, index)
                         filter!(i -> i != index, infected)
                         filter!(i -> i != index, infected_asymptomatic)
                         recovery_days[index] = t
-
+                    
+                    # If infected person has symptoms he can die
                     elseif index ∈ infected && rand()<death_prop
                         population[index] = 0
                         append!(dead, index)
@@ -227,6 +245,7 @@ function area_epidemic_simulation(size, N0, meetings, incubation_time, immunity_
                 end
             end
         end
+
         total_infected_number = length(infected) + length(infected_asymptomatic)
         deaths = length(dead)
         append!(total_infected_record, total_infected_number)
@@ -244,6 +263,7 @@ function area_epidemic_simulation(size, N0, meetings, incubation_time, immunity_
         end
     end
     deaths = length(dead)
+    max_symptoms_infected = maximum(infected_record)
 
     if display_plot
         plot(0:T, total_infected_record, title="Deaths: $deaths", legend=false)
@@ -255,11 +275,11 @@ function area_epidemic_simulation(size, N0, meetings, incubation_time, immunity_
         gif(anim, "epidemic.gif", fps=15) |> display
     end
 
-    return [deaths, maximum(infected_record)]
+    return [deaths, max_symptoms_infected]
 end
 
 
-size = 100
+size = 70
 N0 = 10
 meetings = 3
 incubation_time = 5
@@ -273,7 +293,7 @@ recovery_prop = 0.04
 infection_propability = 0.8
 symptoms_prop = 0.5
 move_prop = 0.002
-T = 500
+T = 300
 
 area_epidemic_simulation(size, N0, meetings, incubation_time, immunity_time, lockdowns,
         vaccination_day, vaccinations, vaccine_immunity_time,
