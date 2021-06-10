@@ -18,13 +18,12 @@ display_plot = false
 
 
 counter = 1
-travels = []
+meetings = []
 deaths = []
 max_infected = []
 
 # Run three simulations for each moving propability in range from 0.01 to 0.001
-for move_prop in 0.01:-0.001:0.001
-    average_travels = Int(round(move_prop * size^2, digits=0))
+for meetings_number in 4:-1:1
     deaths_results = []
     max_infected_results = []
     
@@ -45,11 +44,11 @@ for move_prop in 0.01:-0.001:0.001
     average_deaths = deaths_results |> mean |> floor |> Int
     average_max_infected = max_infected_results |> mean |> floor |> Int
     
-    append!(travels, average_travels)
+    append!(meetings, meetings_number)
     append!(deaths, average_deaths)
     append!(max_infected, average_max_infected)
 end
 
-data = DataFrame(travels=travels,
+data = DataFrame(meetings=meetings,
                 deaths=deaths,
                 max_infected=max_infected) |> display

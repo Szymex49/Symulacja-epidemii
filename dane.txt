@@ -9,4 +9,4 @@ recovery_prop = 0.04
 infection_propability = 0.8
 symptoms_prop = 0.5
 move_prop = 0.002
-T = 500
+T = 300
