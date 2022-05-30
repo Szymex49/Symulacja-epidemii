@@ -1,4 +1,4 @@
-# Symulacja-epidemii
+# Symulacja epidemii
 ### Projekt przygotowali:
 Viktoriia Morhun <br> Yevheniia Volkova <br> Adam Wrzesiński <br> Szymon Malec
 
